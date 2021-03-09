@@ -53,6 +53,7 @@ async def add(ctx, style, weight: int):
     style_list[style] = weight
     with open(LIST_PATH, 'w') as f:
         json.dump(style_list, f)
+    await ctx.send('Added {0} with weight {1}'.format(style, weight))
 
 
 @bot.command(name='delete', help='Deletes a play style from the list')
@@ -69,6 +70,27 @@ async def delete(ctx, style):
     with open(LIST_PATH, 'w') as f:
         json.dump(style_list, f)
     await ctx.send('Deleted {0} with weight {1}'.format(style, weight))
+
+
+@bot.command(name='edit', help='Edits a current play style\'s weight')
+async def edit(ctx, style, weight: int):
+    # Handle argument errors
+    if style not in style_list.keys():  # Style not in list
+        await ctx.send(error_msg('!edit <style> <weight>',
+                                 '\'style\' needs to be an existing entry in !list'))
+        return
+    elif int(weight) <= 0:  # Weight not a natural number
+        await ctx.send(error_msg('!edit <style> <weight>',
+                                 'style: name of existing play style\n'
+                                 'weight: positive integer specifying weight of the style'))
+        return
+
+    # Update style list and .json file
+    old_weight = style_list[style]
+    style_list[style] = weight
+    with open(LIST_PATH, 'w') as f:
+        json.dump(style_list, f)
+    await ctx.send('Edited {0}: weight {1} -> {2}'.format(style, old_weight, weight))
 
 
 @bot.command(name='list', help='Lists all play styles, their respective weights, and probabilities')
@@ -102,6 +124,10 @@ async def on_command_error(ctx, error):
     if ctx.command.name == 'add':
         await ctx.send(error_msg('!add <style> <weight>',
                                  'style: name of play style\n'
+                                 'weight: positive integer specifying weight of the style'))
+    elif ctx.command.name == 'edit':
+        await ctx.send(error_msg('!edit <style> <weight>',
+                                 'style: name of existing play style\n'
                                  'weight: positive integer specifying weight of the style'))
 
 bot.run(TOKEN)
