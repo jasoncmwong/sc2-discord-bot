@@ -43,7 +43,7 @@ async def about(ctx):
 @bot.command(name='add', help='Adds a new play style along with its weight to the list')
 async def add(ctx, style, weight: int):
     # Handle the case where the weight is not a natural number
-    if int(weight) <= 0:
+    if weight <= 0:
         await ctx.send(error_msg('!add <style> <weight>',
                                  'style: name of play style\n'
                                  'weight: positive integer specifying weight of the style'))
@@ -53,7 +53,7 @@ async def add(ctx, style, weight: int):
     style_list[style] = weight
     with open(LIST_PATH, 'w') as f:
         json.dump(style_list, f)
-    await ctx.send('Added {0} with weight {1}'.format(style, weight))
+    await ctx.send('Added **{0}** with weight **{1}**'.format(style, weight))
 
 
 @bot.command(name='delete', help='Deletes a play style from the list')
@@ -69,7 +69,7 @@ async def delete(ctx, style):
     del style_list[style]
     with open(LIST_PATH, 'w') as f:
         json.dump(style_list, f)
-    await ctx.send('Deleted {0} with weight {1}'.format(style, weight))
+    await ctx.send('Deleted **{0}** with weight **{1}**'.format(style, weight))
 
 
 @bot.command(name='edit', help='Edits a current play style\'s weight')
@@ -90,7 +90,7 @@ async def edit(ctx, style, weight: int):
     style_list[style] = weight
     with open(LIST_PATH, 'w') as f:
         json.dump(style_list, f)
-    await ctx.send('Edited {0}: weight {1} -> {2}'.format(style, old_weight, weight))
+    await ctx.send('Edited **{0}**: weight {1} -> **{2}**'.format(style, old_weight, weight))
 
 
 @bot.command(name='list', help='Lists all play styles, their respective weights, and probabilities')
@@ -111,6 +111,24 @@ async def roll(ctx):
         if rand_roll < weight_sum:
             break
     await ctx.send(key)
+
+
+@bot.command(name='scale', help='Scales the weights of the styles in the list')
+async def scale(ctx, factor: float):
+    # Handle the case where the weight is not above 0
+    if factor <= 0:
+        await ctx.send(error_msg('!scale <style> <weight>',
+                                 'factor: name of play style'))
+        return
+
+    # Scale all weights in the list
+    for key in style_list.keys():
+        style_list[key] = int(round((style_list[key] * factor)))
+
+    # Update .json file
+    with open(LIST_PATH, 'w') as f:
+        json.dump(style_list, f)
+    await ctx.send('Scaled weights by **{0}**'.format(factor))
 
 
 @bot.command(name='stop', help='Stops the bot')
