@@ -4,11 +4,16 @@ from discord.ext import commands
 import dotenv
 import json
 import random
+import requests
+from bs4 import BeautifulSoup
 
 dotenv.load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
 LIST_PATH = os.getenv('LIST_PATH')
+THUMBS_UP = '\U0001F44D'
+URL = 'https://www.liquipedia.net/starcraft2/'
+UNDESIRED_TAGS = ['Type', 'Description', 'Hotkey']
 
 
 def error_msg(cmd, descr):
@@ -53,7 +58,7 @@ async def add(ctx, style, weight: int):
     style_list[style] = weight
     with open(LIST_PATH, 'w') as f:
         json.dump(style_list, f)
-    await ctx.send('Added **{0}** with weight **{1}**'.format(style, weight))
+    await ctx.message.add_reaction(THUMBS_UP)
 
 
 @bot.command(name='delete', help='Deletes a play style from the list')
@@ -69,7 +74,7 @@ async def delete(ctx, style):
     del style_list[style]
     with open(LIST_PATH, 'w') as f:
         json.dump(style_list, f)
-    await ctx.send('Deleted **{0}** with weight **{1}**'.format(style, weight))
+    await ctx.message.add_reaction(THUMBS_UP)
 
 
 @bot.command(name='edit', help='Edits a current play style\'s weight')
@@ -90,7 +95,7 @@ async def edit(ctx, style, weight: int):
     style_list[style] = weight
     with open(LIST_PATH, 'w') as f:
         json.dump(style_list, f)
-    await ctx.send('Edited **{0}**: weight {1} -> **{2}**'.format(style, old_weight, weight))
+    await ctx.message.add_reaction(THUMBS_UP)
 
 
 @bot.command(name='list', help='Lists all play styles, their respective weights, and probabilities')
@@ -100,6 +105,7 @@ async def list_styles(ctx):
     for key in style_list.keys():
         print_str += '{0}, {1}, {2:.2f}\n'.format(key, style_list[key], style_list[key]/tot_weight)
     await ctx.send(print_str[:-1])
+    await ctx.message.add_reaction(THUMBS_UP)
 
 
 @bot.command(name='roll', help='Rolls a new play style')
@@ -111,6 +117,7 @@ async def roll(ctx):
         if rand_roll < weight_sum:
             break
     await ctx.send(key)
+    await ctx.message.add_reaction(THUMBS_UP)
 
 
 @bot.command(name='scale', help='Scales the weights of the styles in the list')
@@ -128,13 +135,32 @@ async def scale(ctx, factor: float):
     # Update .json file
     with open(LIST_PATH, 'w') as f:
         json.dump(style_list, f)
-    await ctx.send('Scaled weights by **{0}**'.format(factor))
+    await ctx.message.add_reaction(THUMBS_UP)
 
 
 @bot.command(name='stop', help='Stops the bot')
 async def stop(ctx):
     await ctx.send('Bot logging off...')
+    await ctx.message.add_reaction(THUMBS_UP)
     await bot.logout()
+
+
+@bot.command(name='info', help='Searches Liquipedia for info on the search term')
+async def info(ctx, search):
+    page = requests.get(URL + search)
+    soup = BeautifulSoup(page.content, 'html.parser')
+    infobox_tags = soup.find_all('div', class_='infobox-cell-2 infobox-description')
+
+    if page.status_code == 404:
+        await ctx.send('No article found.')
+        return
+
+    info_str = 'Accessed: ' + '<' + URL + search + '>\n-----\n'
+    for tag in infobox_tags:
+        if tag.text[:-1] not in UNDESIRED_TAGS:
+            info_str += '**' + tag.text.replace(':', ' ') + '**\n'
+            info_str += tag.next_sibling.next_sibling.get_text(separator=' ') + '\n'
+    await ctx.send(info_str)
 
 
 @bot.event
