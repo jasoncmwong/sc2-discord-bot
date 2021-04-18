@@ -6,20 +6,31 @@ import json
 import random
 import requests
 from bs4 import BeautifulSoup
+import re
+import itertools as it
 
 dotenv.load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
 LIST_PATH = os.getenv('LIST_PATH')
 THUMBS_UP = '\U0001F44D'
-URL = 'https://www.liquipedia.net/starcraft2/'
+INFO_URL = 'https://www.liquipedia.net/starcraft2/'
 UNDESIRED_TAGS = ['Type', 'Description', 'Hotkey']
+
+COST_EMOTES = ['\U0001F48E', '\U0001F6E2', '\U000023F1', '\U0001F464']
+DEF_EMOTES = ['\U0001FA78', '\U0001F300', '\U0001F6E1']
 
 
 def error_msg(cmd, descr):
     msg = 'Error: `' + cmd + '`\n' \
           '```' + descr + '```'
     return msg
+
+
+def mult_sub(text, patterns):
+    for old, new in patterns:
+        text = re.sub(old, new, text)
+    return text
 
 
 if os.path.exists(LIST_PATH):
@@ -70,7 +81,6 @@ async def delete(ctx, style):
         return
 
     # Update style list and .json file
-    weight = style_list[style]
     del style_list[style]
     with open(LIST_PATH, 'w') as f:
         json.dump(style_list, f)
@@ -146,8 +156,9 @@ async def stop(ctx):
 
 
 @bot.command(name='info', help='Searches Liquipedia for info on the search term')
-async def info(ctx, search):
-    page = requests.get(URL + search)
+async def info(ctx, *search_terms):
+    search = '_'.join([c.capitalize() for c in search_terms])
+    page = requests.get(INFO_URL + search)
     soup = BeautifulSoup(page.content, 'html.parser')
     infobox_tags = soup.find_all('div', class_='infobox-cell-2 infobox-description')
 
@@ -155,11 +166,45 @@ async def info(ctx, search):
         await ctx.send('No article found.')
         return
 
-    info_str = 'Accessed: ' + '<' + URL + search + '>\n-----\n'
+    info_str = 'Accessed: ' + '<' + INFO_URL + search + '>\n-----\n'
     for tag in infobox_tags:
         if tag.text[:-1] not in UNDESIRED_TAGS:
-            info_str += '**' + tag.text.replace(':', ' ') + '**\n'
-            info_str += tag.next_sibling.next_sibling.get_text(separator=' ') + '\n'
+            header = tag.text.replace(':', ' ').strip()
+            info_str += '**' + header + '**\n'
+            # Parse next info differently based on header
+            if header == 'Cost':
+                header_info = re.findall(r'\d+ \(\d+\)|\d+.\d+|\d+',
+                                         tag.next_sibling.next_sibling.get_text(separator=' ').strip())
+                for i in range(len(header_info)):
+                    info_str += COST_EMOTES[i] + header_info[i] + ' | '
+                info_str = info_str[:-3]
+            elif header == 'Attributes':
+                info_str += ', '.join(re.split(r'[,\s]+', tag.next_sibling.next_sibling.get_text(separator=' ').strip(' ')))
+            elif 'Attack' in header:
+                info_str += mult_sub(tag.next_sibling.next_sibling.get_text(separator=' '),
+                                     [(r'\s+:', ''),
+                                     (r'\(\s+', '('),
+                                     (r'\s+\)', ')'),
+                                     (r'\s+', ' '),
+                                     (r'(\w) (\d)', r'\1: \2'),
+                                     (r'(\w) (\w):', r'\1\n\2:'),
+                                     (r'(\w+):', r'\n\1:')]).lstrip()
+            elif header == 'Defense':
+                info = re.findall(r'\d+|\(.*?\)',
+                                  mult_sub(tag.next_sibling.next_sibling.get_text(separator=' '),
+                                           [(r'\(\s+', '('),
+                                            (r'\s+\)', ')'),
+                                            (r'\s+', ' ')]))
+                if len(info) < 4:
+                    emotes = [DEF_EMOTES[0], DEF_EMOTES[2]]
+                else:
+                    emotes = DEF_EMOTES
+                info_str += ' '.join(list(map(lambda l: l[0]+l[1]+' | ' if l[0] is not None else l[1],
+                                              [*it.zip_longest(emotes, info)])))
+            else:
+                info_str += re.sub(r'\s+', ' ', tag.next_sibling.next_sibling.get_text(separator=' ').strip())
+            info_str += '\n'
+    info_str = info_str.strip()
     await ctx.send(info_str)
 
 
